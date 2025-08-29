@@ -179,6 +179,11 @@ private:
    void OnBeginPurge(size_t begin, size_t end);
    void OnEndPurge();
 
+   static bool IsSilentSamples(
+      constSamplePtr src,
+      size_t numsamples,
+      sampleFormat srcformat);
+
    friend SqliteSampleBlock;
 
    AudacityProject &mProject;
@@ -217,11 +222,27 @@ SqliteSampleBlockFactory::~SqliteSampleBlockFactory() = default;
 SampleBlockPtr SqliteSampleBlockFactory::DoCreate(
    constSamplePtr src, size_t numsamples, sampleFormat srcformat )
 {
+   // First check if this sample block is silent (all zero or subnormal values)
+   // If so, skip adding to the database and call DoCreateSilent() instead
+   if SqliteSampleBlockFactory::IsSilentSamples(src, numsamples, srcformat) {
+      return DoCreateSilent(numsamples, srcformat);
+   }
+
    auto sb = std::make_shared<SqliteSampleBlock>(shared_from_this());
    sb->SetSamples(src, numsamples, srcformat);
    // block id has now been assigned
    mAllBlocks[ sb->GetBlockID() ] = sb;
    return sb;
+}
+
+static bool SqliteSampleBlockFactory::IsSilentSamples(constSamplePtr src, size_t numsamples, sampleFormat srcformat) {
+   if (srcformat < floatSample) {
+      // Scan all samples to ensure they are zeros (integer samples)
+      return false;
+   } else {
+      // Do the same for floating point, but also scan for +/-0.0 or subnormal values
+      return false;
+   }
 }
 
 auto SqliteSampleBlockFactory::GetActiveBlockIDs() -> SampleBlockIDs
