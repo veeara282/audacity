@@ -235,13 +235,27 @@ SampleBlockPtr SqliteSampleBlockFactory::DoCreate(
    return sb;
 }
 
+inline uint32_t extractFloatBits(float f) {
+    uint32_t u;
+    std::memcpy(&u, &f, sizeof(u));
+    return u;
+}
+
 static bool SqliteSampleBlockFactory::IsSilentSamples(constSamplePtr src, size_t numsamples, sampleFormat srcformat) {
+   constexpr uint32_t floatExponentMask = 0x7F800000;
+
    if (srcformat < floatSample) {
-      // Scan all samples to ensure they are zeros (integer samples)
-      return false;
+      // Integer types: memcmp to all-zero buffer
+      size_t bufSizeBytes = numsamples * SAMPLE_SIZE(srcformat);
+      static const char zero = 0;
+      // Instead of allocating, just compare to a null pointer (which is zeroed memory)
+      return std::memcmp(src, &zero, bufSizeBytes) == 0;
    } else {
-      // Do the same for floating point, but also scan for +/-0.0 or subnormal values
-      return false;
+      // For floats: use std::all_of for clarity
+      const float* floatSrc = reinterpret_cast<const float*>(src);
+      return std::all_of(floatSrc, floatSrc + numsamples, [](float f) {
+         return (extractFloatBits(f) & floatExponentMask) == 0;
+      });
    }
 }
 
